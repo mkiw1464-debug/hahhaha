@@ -1,0 +1,9 @@
+Package: com.ffnet.ios
+Name: FFNET IOS
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: FFNET IOS - Free Fire OB54 Cheat (Aimbot / ESP / Bypass)
+Maintainer: FFNET
+Author: FFNET
+Section: Tweaks
+Depends: mobilesubstrate
