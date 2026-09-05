@@ -19,7 +19,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/theos
-        key: theos-macos14-lib-v1
+        key: theos-macos14-v7
 
     - name: Install Theos
       if: steps.theos-cache.outputs.cache-hit != 'true'
@@ -32,7 +32,7 @@ jobs:
       run: |
         mkdir -p ~/theos/sdks
         curl -fsSL \
-          "https://github.com/theos/sdks/releases/download/2024Q4/iPhoneOS15.5.sdk.tar.xz" \
+          "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS15.6.sdk.tar.xz" \
           -o /tmp/sdk.tar.xz
         tar -xJf /tmp/sdk.tar.xz -C ~/theos/sdks/
         rm /tmp/sdk.tar.xz
@@ -41,12 +41,16 @@ jobs:
       if: steps.theos-cache.outputs.cache-hit != 'true'
       run: |
         mkdir -p ~/theos/lib ~/theos/include
-
-        # substrate.h — check in vendor/include first
-        if grep -qr "MSHookFunction" ~/theos/vendor/include/ 2>/dev/null; then
-          cp $(grep -rl "MSHookFunction" ~/theos/vendor/include/ | head -1) \
-             ~/theos/include/substrate.h
+        EXISTING=$(find ~/theos/vendor -name "libsubstrate.dylib" 2>/dev/null | head -1)
+        if [ -n "$EXISTING" ]; then
+          cp "$EXISTING" ~/theos/lib/libsubstrate.dylib
         else
+          python3 -c "
+        import struct
+        open('${HOME}/theos/lib/libsubstrate.dylib','wb').write(
+          struct.pack('<IIIIIII',0xFEEDFACF,0x0100000C,0,6,0,0,0))"
+        fi
+        if ! grep -q "MSHookFunction" ~/theos/include/substrate.h 2>/dev/null; then
           cat > ~/theos/include/substrate.h << 'SUB'
         #pragma once
         #ifdef __cplusplus
@@ -60,28 +64,6 @@ jobs:
         SUB
         fi
 
-        # libsubstrate.dylib stub
-        EXISTING=$(find ~/theos/vendor -name "libsubstrate.dylib" 2>/dev/null | head -1)
-        if [ -n "$EXISTING" ]; then
-          cp "$EXISTING" ~/theos/lib/libsubstrate.dylib
-        else
-          python3 -c "
-        import struct
-        open('${HOME}/theos/lib/libsubstrate.dylib','wb').write(
-          struct.pack('<IIIIIII', 0xFEEDFACF, 0x0100000C, 0, 6, 0, 0, 0))
-        "
-        fi
-
-    - name: Verify env
-      run: |
-        export THEOS=~/theos
-        echo "library.mk : $(ls $THEOS/makefiles/library.mk && echo OK || echo MISSING)"
-        echo "common.mk  : $(ls $THEOS/makefiles/common.mk  && echo OK || echo MISSING)"
-        echo "SDK        : $(ls $THEOS/sdks/*.sdk 2>/dev/null | head -1 | xargs basename || echo MISSING)"
-        echo "substrate.h: $([ -f $THEOS/include/substrate.h ] && echo OK || echo MISSING)"
-        echo "libsubst   : $([ -f $THEOS/lib/libsubstrate.dylib ] && echo OK || echo MISSING)"
-        echo "clang      : $(clang --version | head -1)"
-
     - name: Build
       run: |
         export THEOS=~/theos
@@ -91,16 +73,13 @@ jobs:
 
         DYLIB=$(find .theos -name "FFNET_IOS.dylib" 2>/dev/null | head -1)
         if [ -z "$DYLIB" ]; then
-          echo "ERROR: dylib not found. Searching..."
-          find .theos -name "*.dylib" -o -name "*.a" 2>/dev/null | head -20
-          exit 1
+          find . -name "*.dylib" 2>/dev/null | head -10; exit 1
         fi
         echo "DYLIB_PATH=$DYLIB" >> $GITHUB_ENV
         echo "✓ $DYLIB ($(du -h $DYLIB | cut -f1))"
 
     - name: Sign
-      run: |
-        codesign --force --sign - --timestamp=none "${{ env.DYLIB_PATH }}"
+      run: codesign --force --sign - --timestamp=none "${{ env.DYLIB_PATH }}"
 
     - name: Upload
       uses: actions/upload-artifact@v4
