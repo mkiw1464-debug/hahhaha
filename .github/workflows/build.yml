@@ -68,7 +68,7 @@ jobs:
       run: |
         export THEOS=~/theos
         make clean 2>/dev/null || true
-        make ARCHS=arm64 TARGET="iphone:clang:16.5:15.0" FINALPACKAGE=1 DEBUG=0 \
+        make ARCHS=arm64 TARGET="iphone:clang:15.6:15.0" FINALPACKAGE=1 DEBUG=0 \
              -j$(sysctl -n hw.ncpu)
 
         DYLIB=$(find .theos -name "FFNET_IOS.dylib" 2>/dev/null | head -1)
